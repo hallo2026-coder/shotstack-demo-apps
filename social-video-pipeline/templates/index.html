@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Social Video Pipeline – Shotstack</title>
+    <style>
+        body { font-family: sans-serif; max-width: 800px; margin: 50px auto; padding: 20px; }
+        input, textarea { width: 100%; padding: 8px; margin: 8px 0; }
+        button { background: #007bff; color: white; border: none; padding: 10px 20px; }
+    </style>
+</head>
+<body>
+    <h1>🎬 Social Video from Blog/Article</h1>
+    <input type="text" id="title" placeholder="Title"><br>
+    <textarea id="content" placeholder="Article content or key points..."></textarea><br>
+    <button id="renderBtn">Generate Video</button>
+    <div id="status"></div>
+    <div id="videoContainer"></div>
+
+    <script>
+        document.getElementById('renderBtn').onclick = async () => {
+            const title = document.getElementById('title').value;
+            const content = document.getElementById('content').value;
+            if (!title) return alert('Title required');
+            const statusDiv = document.getElementById('status');
+            statusDiv.innerHTML = 'Submitting...';
+            const res = await fetch('/render', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({title, content})
+            });
+            const data = await res.json();
+            if (data.error) {
+                statusDiv.innerHTML = 'Error: ' + data.error;
+                return;
+            }
+            const renderId = data.render_id;
+            statusDiv.innerHTML = `Queued: ${renderId}`;
+            poll(renderId);
+        };
+
+        async function poll(rid) {
+            const interval = setInterval(async () => {
+                const res = await fetch(`/status/${rid}`);
+                const status = await res.json();
+                if (status.status === 'done') {
+                    clearInterval(interval);
+                    document.getElementById('status').innerHTML = `✅ Done! <a href="${status.url}" target="_blank">Download video</a>`;
+                    document.getElementById('videoContainer').innerHTML = `<video controls src="${status.url}"></video>`;
+                } else if (status.status === 'failed') {
+                    clearInterval(interval);
+                    document.getElementById('status').innerHTML = `❌ Failed: ${status.message}`;
+                }
+            }, 2000);
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Text to Video – Shotstack Demo</title>
+    <style>
+        body { font-family: sans-serif; max-width: 800px; margin: 50px auto; padding: 20px; }
+        textarea { width: 100%; height: 150px; padding: 10px; font-size: 16px; }
+        button { background: #007bff; color: white; border: none; padding: 10px 20px; cursor: pointer; }
+        .status { margin-top: 20px; font-family: monospace; }
+        video { max-width: 100%; margin-top: 20px; }
+    </style>
+</head>
+<body>
+    <h1>📹 Text to Video (Shotstack API)</h1>
+    <textarea id="text" placeholder="Enter your text here..."></textarea><br>
+    <button id="renderBtn">Render Video</button>
+    <div class="status" id="status"></div>
+    <div id="videoContainer"></div>
+
+    <script>
+        document.getElementById('renderBtn').onclick = async () => {
+            const text = document.getElementById('text').value;
+            if (!text) return alert('Please enter text');
+            const statusDiv = document.getElementById('status');
+            const videoContainer = document.getElementById('videoContainer');
+            statusDiv.innerHTML = '⏳ Submitting render job...';
+            videoContainer.innerHTML = '';
+            try {
+                const res = await fetch('/render', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({text})
+                });
+                const data = await res.json();
+                if (data.error) throw new Error(data.error);
+                const renderId = data.render_id;
+                statusDiv.innerHTML = `✅ Render queued: ${renderId}<br>⏳ Polling for completion...`;
+                pollStatus(renderId);
+            } catch (err) {
+                statusDiv.innerHTML = `❌ Error: ${err.message}`;
+            }
+        };
+
+        async function pollStatus(renderId) {
+            const statusDiv = document.getElementById('status');
+            const videoContainer = document.getElementById('videoContainer');
+            const interval = setInterval(async () => {
+                const res = await fetch(`/status/${renderId}`);
+                const status = await res.json();
+                if (status.status === 'done') {
+                    clearInterval(interval);
+                    const videoUrl = status.url;
+                    statusDiv.innerHTML = `✅ Render complete! <a href="${videoUrl}" target="_blank">Download video</a>`;
+                    videoContainer.innerHTML = `<video controls src="${videoUrl}"></video>`;
+                } else if (status.status === 'failed') {
+                    clearInterval(interval);
+                    statusDiv.innerHTML = `❌ Render failed: ${status.message || 'unknown error'}`;
+                } else {
+                    statusDiv.innerHTML = `⏳ Rendering... (${status.status})`;
+                }
+            }, 2000);
+        }
+    </script>
+</body>
+</html>

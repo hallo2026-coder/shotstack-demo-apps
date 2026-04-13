@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>AI Video Agent – Shotstack</title>
+    <style>
+        body { font-family: sans-serif; max-width: 800px; margin: 50px auto; padding: 20px; }
+        input, button { width: 100%; padding: 10px; margin: 10px 0; }
+        button { background: #007bff; color: white; border: none; cursor: pointer; }
+        .script { background: #f4f4f4; padding: 10px; border-radius: 5px; margin-top: 20px; }
+    </style>
+</head>
+<body>
+    <h1>🤖 AI Video Agent</h1>
+    <p>Enter a topic, and an AI will generate a script and create a video using Shotstack.</p>
+    <input type="text" id="topic" placeholder="e.g., 'Space exploration'" value="Space exploration">
+    <button id="generateBtn">Generate Video</button>
+    <div id="status"></div>
+    <div id="scriptDiv" class="script" style="display:none;"></div>
+    <div id="videoContainer"></div>
+
+    <script>
+        document.getElementById('generateBtn').onclick = async () => {
+            const topic = document.getElementById('topic').value;
+            if (!topic) return alert('Enter a topic');
+            const statusDiv = document.getElementById('status');
+            const scriptDiv = document.getElementById('scriptDiv');
+            const videoContainer = document.getElementById('videoContainer');
+            statusDiv.innerHTML = '🤖 Generating script and submitting render...';
+            scriptDiv.style.display = 'none';
+            videoContainer.innerHTML = '';
+            const res = await fetch('/generate', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({topic})
+            });
+            const data = await res.json();
+            if (data.error) {
+                statusDiv.innerHTML = 'Error: ' + data.error;
+                return;
+            }
+            scriptDiv.innerHTML = `<strong>Generated script:</strong><br>${data.script}`;
+            scriptDiv.style.display = 'block';
+            const renderId = data.render_id;
+            statusDiv.innerHTML = `✅ Render queued: ${renderId}<br>⏳ Polling for completion...`;
+            poll(renderId);
+        };
+
+        async function poll(rid) {
+            const interval = setInterval(async () => {
+                const res = await fetch(`/status/${rid}`);
+                const status = await res.json();
+                if (status.status === 'done') {
+                    clearInterval(interval);
+                    document.getElementById('status').innerHTML = `✅ Done! <a href="${status.url}" target="_blank">Download video</a>`;
+                    document.getElementById('videoContainer').innerHTML = `<video controls src="${status.url}"></video>`;
+                } else if (status.status === 'failed') {
+                    clearInterval(interval);
+                    document.getElementById('status').innerHTML = `❌ Failed: ${status.message}`;
+                }
+            }, 2000);
+        }
+    </script>
+</body>
+</html>
