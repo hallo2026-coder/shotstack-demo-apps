@@ -1,19 +1,25 @@
-version: '3'
+version: '3.8'
 services:
   text-to-video:
-    build: ./text-to-video
+    build:
+      context: .
+      dockerfile: text-to-video/Dockerfile
     ports:
       - "5001:5001"
     env_file:
       - .env
-  social-video:
-    build: ./social-video-pipeline
+  social-pipeline:
+    build:
+      context: .
+      dockerfile: social-video-pipeline/Dockerfile
     ports:
       - "5002:5002"
     env_file:
       - .env
-  ai-video:
-    build: ./ai-video-agent
+  ai-agent:
+    build:
+      context: .
+      dockerfile: ai-video-agent/Dockerfile
     ports:
       - "5003:5003"
     env_file:
