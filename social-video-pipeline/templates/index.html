@@ -1,57 +1,72 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Social Video Pipeline – Shotstack</title>
+    <title>Auto Social Video Pipeline</title>
     <style>
-        body { font-family: sans-serif; max-width: 800px; margin: 50px auto; padding: 20px; }
-        input, textarea { width: 100%; padding: 8px; margin: 8px 0; }
-        button { background: #007bff; color: white; border: none; padding: 10px 20px; }
+        body { font-family: system-ui; max-width: 800px; margin: 2rem auto; padding: 1rem; }
+        textarea { width: 100%; padding: 0.5rem; font-family: monospace; }
+        button { background: #e67e22; color: white; border: none; padding: 0.75rem 1.5rem; cursor: pointer; }
+        #status { background: #f9e6cf; border-radius: 8px; padding: 1rem; margin-top: 1rem; }
     </style>
 </head>
 <body>
-    <h1>🎬 Social Video from Blog/Article</h1>
-    <input type="text" id="title" placeholder="Title"><br>
-    <textarea id="content" placeholder="Article content or key points..."></textarea><br>
-    <button id="renderBtn">Generate Video</button>
-    <div id="status"></div>
+    <h1>📱 Auto Social Video Pipeline</h1>
+    <p>Paste blog/article text → Auto-split into scenes → Vertical video with music</p>
+    <textarea id="blogText" rows="10" placeholder="Paste your long-form content here...">The future of video editing is API-driven. With Shotstack, you can generate thousands of social clips automatically. This demo splits your text into digestible scenes, adds background music, and exports in 9:16 for TikTok/Reels.</textarea><br><br>
+    <button id="renderBtn">Generate Social Video</button>
+    <div id="status">Ready</div>
     <div id="videoContainer"></div>
 
     <script>
-        document.getElementById('renderBtn').onclick = async () => {
-            const title = document.getElementById('title').value;
-            const content = document.getElementById('content').value;
-            if (!title) return alert('Title required');
-            const statusDiv = document.getElementById('status');
-            statusDiv.innerHTML = 'Submitting...';
-            const res = await fetch('/render', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({title, content})
-            });
-            const data = await res.json();
-            if (data.error) {
-                statusDiv.innerHTML = 'Error: ' + data.error;
-                return;
-            }
-            const renderId = data.render_id;
-            statusDiv.innerHTML = `Queued: ${renderId}`;
-            poll(renderId);
-        };
+        const renderBtn = document.getElementById('renderBtn');
+        const statusDiv = document.getElementById('status');
+        const videoContainer = document.getElementById('videoContainer');
 
-        async function poll(rid) {
-            const interval = setInterval(async () => {
-                const res = await fetch(`/status/${rid}`);
-                const status = await res.json();
-                if (status.status === 'done') {
-                    clearInterval(interval);
-                    document.getElementById('status').innerHTML = `✅ Done! <a href="${status.url}" target="_blank">Download video</a>`;
-                    document.getElementById('videoContainer').innerHTML = `<video controls src="${status.url}"></video>`;
-                } else if (status.status === 'failed') {
-                    clearInterval(interval);
-                    document.getElementById('status').innerHTML = `❌ Failed: ${status.message}`;
+        renderBtn.addEventListener('click', async () => {
+            const blogText = document.getElementById('blogText').value;
+            if (!blogText.trim()) return alert('Please paste some text');
+            
+            renderBtn.disabled = true;
+            statusDiv.innerHTML = '⏳ Submitting social pipeline job...';
+            
+            try {
+                const res = await fetch('/render', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ blog_text: blogText })
+                });
+                const data = await res.json();
+                if (data.error) throw new Error(data.error);
+                
+                const renderId = data.render_id;
+                statusDiv.innerHTML = `✅ Render queued (ID: ${renderId})<br>⏲️ Polling for completion...`;
+                
+                let videoUrl = null;
+                for (let i = 0; i < 90; i++) { // longer for multi-scene
+                    await new Promise(r => setTimeout(r, 2000));
+                    const statusRes = await fetch(`/status/${renderId}`);
+                    const statusData = await statusRes.json();
+                    if (statusData.status === 'done') {
+                        videoUrl = statusData.url;
+                        break;
+                    } else if (statusData.status === 'failed') {
+                        throw new Error('Render failed: ' + statusData.message);
+                    }
+                    statusDiv.innerHTML = `⏳ Rendering ${Math.floor(i*2/60)}/??? minutes...`;
                 }
-            }, 2000);
-        }
+                
+                if (videoUrl) {
+                    statusDiv.innerHTML = '✅ Social video ready!';
+                    videoContainer.innerHTML = `<video controls src="${videoUrl}" autoplay loop style="max-width:300px; border-radius:20px;"></video>`;
+                } else {
+                    throw new Error('Timeout');
+                }
+            } catch (err) {
+                statusDiv.innerHTML = `❌ Error: ${err.message}`;
+            } finally {
+                renderBtn.disabled = false;
+            }
+        });
     </script>
 </body>
 </html>
