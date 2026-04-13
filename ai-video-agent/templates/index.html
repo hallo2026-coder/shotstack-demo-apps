@@ -1,64 +1,92 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>AI Video Agent – Shotstack</title>
+    <title>AI Video Agent</title>
     <style>
-        body { font-family: sans-serif; max-width: 800px; margin: 50px auto; padding: 20px; }
-        input, button { width: 100%; padding: 10px; margin: 10px 0; }
-        button { background: #007bff; color: white; border: none; cursor: pointer; }
-        .script { background: #f4f4f4; padding: 10px; border-radius: 5px; margin-top: 20px; }
+        body { font-family: system-ui; max-width: 800px; margin: 2rem auto; padding: 1rem; background: #0f0f1a; color: white; }
+        input, button { padding: 0.75rem; font-size: 1rem; border-radius: 8px; border: none; }
+        input { width: 70%; background: #2a2a3a; color: white; }
+        button { background: #8b5cf6; color: white; cursor: pointer; }
+        #scriptOutput { background: #1e1e2a; padding: 1rem; border-radius: 8px; margin: 1rem 0; }
+        #status { background: #2a2a3a; padding: 1rem; border-radius: 8px; }
     </style>
 </head>
 <body>
     <h1>🤖 AI Video Agent</h1>
-    <p>Enter a topic, and an AI will generate a script and create a video using Shotstack.</p>
-    <input type="text" id="topic" placeholder="e.g., 'Space exploration'" value="Space exploration">
-    <button id="generateBtn">Generate Video</button>
-    <div id="status"></div>
-    <div id="scriptDiv" class="script" style="display:none;"></div>
+    <p>Describe a topic → GPT generates script → Shotstack renders video</p>
+    <input type="text" id="topicInput" placeholder="e.g., Why Python is awesome for video automation" style="width: 70%;">
+    <button id="generateBtn">Generate & Render Video</button>
+    <div id="scriptOutput"></div>
+    <div id="status">Ready</div>
     <div id="videoContainer"></div>
 
     <script>
-        document.getElementById('generateBtn').onclick = async () => {
-            const topic = document.getElementById('topic').value;
-            if (!topic) return alert('Enter a topic');
-            const statusDiv = document.getElementById('status');
-            const scriptDiv = document.getElementById('scriptDiv');
-            const videoContainer = document.getElementById('videoContainer');
-            statusDiv.innerHTML = '🤖 Generating script and submitting render...';
-            scriptDiv.style.display = 'none';
-            videoContainer.innerHTML = '';
-            const res = await fetch('/generate', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({topic})
-            });
-            const data = await res.json();
-            if (data.error) {
-                statusDiv.innerHTML = 'Error: ' + data.error;
-                return;
-            }
-            scriptDiv.innerHTML = `<strong>Generated script:</strong><br>${data.script}`;
-            scriptDiv.style.display = 'block';
-            const renderId = data.render_id;
-            statusDiv.innerHTML = `✅ Render queued: ${renderId}<br>⏳ Polling for completion...`;
-            poll(renderId);
-        };
+        const generateBtn = document.getElementById('generateBtn');
+        const topicInput = document.getElementById('topicInput');
+        const scriptDiv = document.getElementById('scriptOutput');
+        const statusDiv = document.getElementById('status');
+        const videoContainer = document.getElementById('videoContainer');
 
-        async function poll(rid) {
-            const interval = setInterval(async () => {
-                const res = await fetch(`/status/${rid}`);
-                const status = await res.json();
-                if (status.status === 'done') {
-                    clearInterval(interval);
-                    document.getElementById('status').innerHTML = `✅ Done! <a href="${status.url}" target="_blank">Download video</a>`;
-                    document.getElementById('videoContainer').innerHTML = `<video controls src="${status.url}"></video>`;
-                } else if (status.status === 'failed') {
-                    clearInterval(interval);
-                    document.getElementById('status').innerHTML = `❌ Failed: ${status.message}`;
+        generateBtn.addEventListener('click', async () => {
+            const topic = topicInput.value.trim();
+            if (!topic) return alert('Enter a topic');
+            
+            generateBtn.disabled = true;
+            scriptDiv.innerHTML = '🤔 Generating script with GPT...';
+            statusDiv.innerHTML = '⏳ Generating script...';
+            
+            try {
+                // Step 1: Generate script
+                const scriptRes = await fetch('/generate_script', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ topic })
+                });
+                const scriptData = await scriptRes.json();
+                if (scriptData.error) throw new Error(scriptData.error);
+                
+                const scenes = scriptData.scenes;
+                scriptDiv.innerHTML = `<strong>📝 AI-Generated Script:</strong><br>${scenes.map((s, i) => `${i+1}. ${s}`).join('<br>')}`;
+                
+                // Step 2: Render video
+                statusDiv.innerHTML = '🎬 Sending to Shotstack...';
+                const renderRes = await fetch('/render', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ scenes })
+                });
+                const renderData = await renderRes.json();
+                if (renderData.error) throw new Error(renderData.error);
+                
+                const renderId = renderData.render_id;
+                statusDiv.innerHTML = `✅ Render queued (ID: ${renderId})<br>⏲️ Polling...`;
+                
+                let videoUrl = null;
+                for (let i = 0; i < 60; i++) {
+                    await new Promise(r => setTimeout(r, 2000));
+                    const statusRes = await fetch(`/status/${renderId}`);
+                    const statusData = await statusRes.json();
+                    if (statusData.status === 'done') {
+                        videoUrl = statusData.url;
+                        break;
+                    } else if (statusData.status === 'failed') {
+                        throw new Error('Render failed');
+                    }
                 }
-            }, 2000);
-        }
+                
+                if (videoUrl) {
+                    statusDiv.innerHTML = '✅ AI video ready!';
+                    videoContainer.innerHTML = `<video controls src="${videoUrl}" autoplay loop style="max-width:100%; border-radius:12px;"></video>`;
+                } else {
+                    throw new Error('Timeout');
+                }
+            } catch (err) {
+                statusDiv.innerHTML = `❌ Error: ${err.message}`;
+                scriptDiv.innerHTML = '';
+            } finally {
+                generateBtn.disabled = false;
+            }
+        });
     </script>
 </body>
 </html>
