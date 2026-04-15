@@ -1,72 +1,176 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Auto Social Video Pipeline</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Shotstack – Social Video Pipeline</title>
     <style>
-        body { font-family: system-ui; max-width: 800px; margin: 2rem auto; padding: 1rem; }
-        textarea { width: 100%; padding: 0.5rem; font-family: monospace; }
-        button { background: #e67e22; color: white; border: none; padding: 0.75rem 1.5rem; cursor: pointer; }
-        #status { background: #f9e6cf; border-radius: 8px; padding: 1rem; margin-top: 1rem; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: system-ui, sans-serif;
+            background: linear-gradient(145deg, #0b1120 0%, #111827 100%);
+            min-height: 100vh;
+            padding: 1rem;
+            color: #f1f5f9;
+        }
+        .container {
+            max-width: 680px;
+            margin: 0 auto;
+            background: rgba(17, 24, 39, 0.8);
+            backdrop-filter: blur(12px);
+            border-radius: 2rem;
+            padding: 1.5rem;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        h1 {
+            font-size: 1.8rem;
+            background: linear-gradient(to right, #f97316, #facc15);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            margin-bottom: 0.5rem;
+        }
+        .badge {
+            background: #f97316;
+            color: black;
+            font-weight: bold;
+            padding: 0.2rem 0.7rem;
+            border-radius: 40px;
+            font-size: 0.7rem;
+            display: inline-block;
+            margin-bottom: 1rem;
+        }
+        textarea {
+            width: 100%;
+            padding: 1rem;
+            background: #0f172a;
+            border: 1px solid #334155;
+            border-radius: 1.25rem;
+            color: #e2e8f0;
+            font-family: monospace;
+            font-size: 0.9rem;
+            resize: vertical;
+        }
+        button {
+            width: 100%;
+            background: #f97316;
+            border: none;
+            padding: 1rem;
+            font-weight: bold;
+            font-size: 1rem;
+            border-radius: 3rem;
+            color: white;
+            margin: 1rem 0;
+            cursor: pointer;
+            transition: 0.1s linear;
+        }
+        button:active { transform: scale(0.97); }
+        button:disabled { background: #4b5563; cursor: not-allowed; }
+        .status {
+            background: #0f172a;
+            border-radius: 1.25rem;
+            padding: 1rem;
+            margin-top: 1rem;
+            font-size: 0.9rem;
+            border-left: 4px solid #f97316;
+        }
+        video {
+            width: 100%;
+            max-width: 360px;
+            display: block;
+            margin: 1rem auto;
+            border-radius: 2rem;
+            box-shadow: 0 20px 35px -10px black;
+        }
+        .loader {
+            display: inline-block;
+            width: 1rem;
+            height: 1rem;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.6s infinite;
+            vertical-align: middle;
+            margin-right: 0.5rem;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @media (max-width: 550px) {
+            .container { padding: 1rem; }
+            h1 { font-size: 1.5rem; }
+        }
     </style>
 </head>
 <body>
-    <h1>📱 Auto Social Video Pipeline</h1>
-    <p>Paste blog/article text → Auto-split into scenes → Vertical video with music</p>
-    <textarea id="blogText" rows="10" placeholder="Paste your long-form content here...">The future of video editing is API-driven. With Shotstack, you can generate thousands of social clips automatically. This demo splits your text into digestible scenes, adds background music, and exports in 9:16 for TikTok/Reels.</textarea><br><br>
-    <button id="renderBtn">Generate Social Video</button>
-    <div id="status">Ready</div>
+<div class="container">
+    <h1>📱 Auto Social Video</h1>
+    <div class="badge">TikTok / Reels ready • 9:16 vertical</div>
+    <p style="margin-bottom: 1rem; font-size: 0.85rem;">Paste a blog post or long text → auto split into scenes + background music</p>
+    
+    <textarea id="blogText" rows="8" placeholder="Paste your article here...&#10;&#10;Example: Artificial intelligence is changing video editing. With Shotstack you can automate social clips. This demo splits long content into digestible 5-second scenes, adds music, and exports vertical video."></textarea>
+    
+    <button id="renderBtn">
+        🎬 Generate Social Video
+    </button>
+    
+    <div id="status" class="status">📋 Ready</div>
     <div id="videoContainer"></div>
+</div>
 
-    <script>
-        const renderBtn = document.getElementById('renderBtn');
-        const statusDiv = document.getElementById('status');
-        const videoContainer = document.getElementById('videoContainer');
+<script>
+    const renderBtn = document.getElementById('renderBtn');
+    const statusDiv = document.getElementById('status');
+    const videoDiv = document.getElementById('videoContainer');
 
-        renderBtn.addEventListener('click', async () => {
-            const blogText = document.getElementById('blogText').value;
-            if (!blogText.trim()) return alert('Please paste some text');
-            
-            renderBtn.disabled = true;
-            statusDiv.innerHTML = '⏳ Submitting social pipeline job...';
-            
-            try {
-                const res = await fetch('/render', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ blog_text: blogText })
-                });
-                const data = await res.json();
-                if (data.error) throw new Error(data.error);
-                
-                const renderId = data.render_id;
-                statusDiv.innerHTML = `✅ Render queued (ID: ${renderId})<br>⏲️ Polling for completion...`;
-                
-                let videoUrl = null;
-                for (let i = 0; i < 90; i++) { // longer for multi-scene
-                    await new Promise(r => setTimeout(r, 2000));
-                    const statusRes = await fetch(`/status/${renderId}`);
-                    const statusData = await statusRes.json();
-                    if (statusData.status === 'done') {
-                        videoUrl = statusData.url;
-                        break;
-                    } else if (statusData.status === 'failed') {
-                        throw new Error('Render failed: ' + statusData.message);
-                    }
-                    statusDiv.innerHTML = `⏳ Rendering ${Math.floor(i*2/60)}/??? minutes...`;
+    renderBtn.addEventListener('click', async () => {
+        const blogText = document.getElementById('blogText').value.trim();
+        if (!blogText) {
+            statusDiv.innerHTML = '⚠️ Please paste some text content.';
+            return;
+        }
+
+        renderBtn.disabled = true;
+        renderBtn.innerHTML = '<span class="loader"></span> Sending to pipeline...';
+        statusDiv.innerHTML = '⏳ Submitting render job...';
+
+        try {
+            const res = await fetch('/render', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ blog_text: blogText })
+            });
+            const data = await res.json();
+            if (data.error) throw new Error(data.error);
+
+            const renderId = data.render_id;
+            statusDiv.innerHTML = `🎥 Pipeline started (ID: ${renderId})<br>⏲️ Rendering multi-scene video...`;
+
+            let videoUrl = null;
+            for (let i = 0; i < 90; i++) {
+                await new Promise(r => setTimeout(r, 2000));
+                const statusRes = await fetch(`/status/${renderId}`);
+                const statusData = await statusRes.json();
+                if (statusData.status === 'done') {
+                    videoUrl = statusData.url;
+                    break;
+                } else if (statusData.status === 'failed') {
+                    throw new Error('Render failed');
                 }
-                
-                if (videoUrl) {
-                    statusDiv.innerHTML = '✅ Social video ready!';
-                    videoContainer.innerHTML = `<video controls src="${videoUrl}" autoplay loop style="max-width:300px; border-radius:20px;"></video>`;
-                } else {
-                    throw new Error('Timeout');
-                }
-            } catch (err) {
-                statusDiv.innerHTML = `❌ Error: ${err.message}`;
-            } finally {
-                renderBtn.disabled = false;
+                statusDiv.innerHTML = `⏳ Rendering scene ${Math.floor(i/10)+1}/? ... ${Math.floor(i*2/60)} min`;
             }
-        });
-    </script>
+
+            if (videoUrl) {
+                statusDiv.innerHTML = '✅ Social video ready! Tap to watch.';
+                videoDiv.innerHTML = `<video controls autoplay loop playsinline src="${videoUrl}"></video>`;
+            } else {
+                throw new Error('Render timeout');
+            }
+        } catch (err) {
+            statusDiv.innerHTML = `❌ ${err.message}`;
+        } finally {
+            renderBtn.disabled = false;
+            renderBtn.innerHTML = '🎬 Generate Social Video';
+        }
+    });
+</script>
 </body>
 </html>
