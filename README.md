@@ -29,7 +29,7 @@ Three production-ready demo applications showcasing the **Shotstack video editin
 
 ### 1. Clone & Install
 ```bash
-git clone https://github.com/YOUR_USERNAME/shotstack-demo-apps.git
+git clone https://github.com/hallo2026-coder/shotstack-demo-apps.git
 cd shotstack-demo-apps
 
 # Install dependencies for each demo (or use a virtual env)
