@@ -1,21 +1,57 @@
 import sys
 from pathlib import Path
-
-# Add the parent directory to Python's module search path
-# This makes the 'shared' module importable when running on Render
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
-import os
-import json
+import os, json
 from flask import Flask, render_template, request, jsonify
 from dotenv import load_dotenv
 from shared.shotstack_client import ShotstackClient
+
+# Import both libraries
 from openai import OpenAI
+from groq import Groq
 
 load_dotenv()
 app = Flask(__name__)
 shotstack = ShotstackClient()
+
+# Initialize clients for both providers
 openai_client = OpenAI(api_key=os.getenv('OPENAI_API_KEY')) if os.getenv('OPENAI_API_KEY') else None
+groq_client = Groq(api_key=os.getenv('GROQ_API_KEY')) if os.getenv('GROQ_API_KEY') else None
+
+def generate_script_with_fallback(topic):
+    """Try OpenAI first, fall back to Groq if needed."""
+    prompt = f"""Write a short, engaging video script about "{topic}" with exactly 3 scenes.
+    Each scene should be a single sentence (max 15 words). Return only JSON:
+    {{"scenes": ["Scene1 text", "Scene2 text", "Scene3 text"]}}"""
+
+    # Try OpenAI first
+    if openai_client:
+        try:
+            response = openai_client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.7
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            print(f"OpenAI failed: {e}")
+
+    # Fallback to Groq if OpenAI fails or isn't configured
+    if groq_client:
+        try:
+            print("Falling back to Groq...")
+            response = groq_client.chat.completions.create(
+                model="llama-3.1-8b-instant",  # A fast, capable model on Groq's free tier
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.7
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            print(f"Groq also failed: {e}")
+
+    # If both fail, raise an exception
+    raise Exception("All LLM providers failed.")
 
 @app.route('/')
 def index():
@@ -23,31 +59,21 @@ def index():
 
 @app.route('/generate_script', methods=['POST'])
 def generate_script():
-    if not openai_client:
-        return jsonify({'error': 'OpenAI API key not configured'}), 500
-    
     data = request.json
     topic = data.get('topic', '')
     if not topic:
         return jsonify({'error': 'Please provide a topic'}), 400
     
     try:
-        # Use GPT to generate a short video script (2-3 sentences per scene)
-        prompt = f"""Write a short, engaging video script about "{topic}" with exactly 3 scenes.
-        Each scene should be a single sentence (max 15 words). Return only JSON:
-        {{"scenes": ["Scene1 text", "Scene2 text", "Scene3 text"]}}"""
+        # Use the fallback function
+        content = generate_script_with_fallback(topic)
         
-        response = openai_client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.7
-        )
-        content = response.choices[0].message.content
-        # Extract JSON (handle markdown code blocks)
+        # Clean and parse the JSON response
         if '```json' in content:
             content = content.split('```json')[1].split('```')[0]
         elif '```' in content:
             content = content.split('```')[1].split('```')[0]
+            
         script = json.loads(content)
         return jsonify(script)
     except Exception as e:
